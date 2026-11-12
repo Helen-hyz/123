@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 运行产物（可用 python main.py / optimize.py 重新生成）
+equity_curve_moutai.png
