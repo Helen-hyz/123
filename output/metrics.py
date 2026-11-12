@@ -89,3 +89,33 @@ def normalize(equity: Sequence[float]) -> list[float]:
         return []
     base = equity[0]
     return [v / base for v in equity]
+
+
+def align_benchmark_curve(bench_bars: Sequence[dict],
+                          dates: Sequence[str]) -> list[float]:
+    """
+    将基准（指数/个股）收盘价按策略日期对齐，前向填充后归一化到 1.0。
+    指数与个股交易日基本一致，前向填充可抹平个别停牌/缺失日。
+    """
+    if not dates:
+        return []
+    if not bench_bars:
+        return [1.0] * len(dates)
+
+    pairs = sorted((str(b["datetime"]), float(b["close"])) for b in bench_bars)
+    out: list[float] = []
+    j = 0
+    last = pairs[0][1]
+    for d in dates:
+        while j < len(pairs) and pairs[j][0] <= d:
+            last = pairs[j][1]
+            j += 1
+        out.append(last)
+    return normalize(out)
+
+
+def exposure_ratio(positions: Sequence[int]) -> float:
+    """持仓天数占比（有持仓的 bar 数 / 总 bar 数）"""
+    if not positions:
+        return 0.0
+    return sum(1 for p in positions if p != 0) / len(positions)

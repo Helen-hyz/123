@@ -67,6 +67,7 @@ class Broker:
         self.equity_curve: list[float] = []
         self.datetimes: list[str] = []
         self.trades: list[Trade] = []
+        self.position_history: list[int] = []   # 每日收盘持仓，用于计算仓位占比
 
     # ---------- 策略下单接口 ----------
     def buy(self, size: Optional[int] = None, price: Optional[float] = None) -> Order:
@@ -145,6 +146,7 @@ class Broker:
     def record_equity(self, datetime_str: str) -> None:
         self.datetimes.append(datetime_str)
         self.equity_curve.append(self.value)
+        self.position_history.append(self.position)
 
     # ---------- 便捷属性 ----------
     @property

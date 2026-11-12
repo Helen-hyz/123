@@ -33,6 +33,43 @@ class AkshareFeed(DataFeed):
         self.load_bars(bars)
 
 
+class AkshareIndexFeed(DataFeed):
+    """akshare 指数日线数据源（如沪深300 ``sh000300``）
+
+    指数不可复权，仅取 OHLCV。用于回测的市场基准。
+    """
+
+    def __init__(self, symbol: str = "sh000300",
+                 start_date: str = "20200101",
+                 end_date: str = "20231231") -> None:
+        super().__init__()
+        import akshare as ak
+        df = ak.stock_zh_index_daily(symbol=symbol)
+        df = df.rename(columns={"date": "datetime"})
+        df["datetime"] = df["datetime"].astype(str)
+        lo, hi = _iso_date(start_date), _iso_date(end_date)
+        df = df[(df["datetime"] >= lo) & (df["datetime"] <= hi)]
+        if df.empty:
+            raise ValueError(f"akshare 指数返回空数据：symbol={symbol} "
+                             f"{start_date}~{end_date}")
+        cols = ["datetime", "open", "high", "low", "close"]
+        if "volume" in df.columns:
+            cols.append("volume")
+        bars = df[cols].to_dict("records")
+        for b in bars:
+            if "volume" not in b:
+                b["volume"] = 0.0
+        self.load_bars(bars)
+
+
+def _iso_date(s: str) -> str:
+    """20200101 -> 2020-01-01；已是 ISO 格式则原样返回"""
+    s = str(s)
+    if len(s) == 8 and s.isdigit():
+        return f"{s[:4]}-{s[4:6]}-{s[6:]}"
+    return s
+
+
 class YahooFeed(DataFeed):
     """yfinance 美股/全球数据源"""
 

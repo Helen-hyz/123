@@ -8,24 +8,27 @@ from __future__ import annotations
 
 from typing import Sequence
 
+from output.metrics import normalize
+
 
 def plot_equity(strategy_equity: Sequence[float],
                 benchmark_equity: Sequence[float],
                 datetimes: Sequence[str] = None,
                 trades: list = None,
                 title: str = "策略 vs 基准 净值曲线（归一化至 1.0）",
-                save_path: str = "equity_curve.png") -> str | None:
+                save_path: str = "equity_curve.png",
+                benchmark_label: str = "基准(沪深300)",
+                split_index: int | None = None) -> str | None:
     """
-    绘制归一化净值对比图，标注买卖点。
+    绘制归一化净值对比图，标注买卖点与样本内/外分界。
 
     参数:
-        strategy_equity: 策略净值序列
-        benchmark_equity: 基准净值序列（买入持有）
+        strategy_equity: 策略净值序列（引擎输出，未归一化）
+        benchmark_equity: 基准净值序列（已归一化到 1.0）
         datetimes: 日期标签（可选）
         trades: 成交记录列表（用于标注买卖点）
+        split_index: 样本内/外分界的位置（可选），用于阴影与竖线
         save_path: 图片保存路径
-    返回:
-        保存路径，或 None（matplotlib 不可用时）
     """
     try:
         import matplotlib
@@ -35,31 +38,64 @@ def plot_equity(strategy_equity: Sequence[float],
         print("[plotter] matplotlib 未安装，跳过绘图")
         return None
 
-    n = min(len(strategy_equity), len(benchmark_equity))
+    strat = normalize(strategy_equity)
+    n = min(len(strat), len(benchmark_equity))
     x = list(range(n))
 
-    fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(x, strategy_equity[:n], label="策略", color="#d62728", linewidth=1.5)
-    ax.plot(x, benchmark_equity[:n], label="基准(买入持有)",
-            color="#1f77b4", linewidth=1.2, alpha=0.7)
+    fig, ax = plt.subplots(figsize=(13, 6.5))
+
+    # 样本内/外阴影
+    if split_index is not None and 0 < split_index < n:
+        ax.axvspan(0, split_index, color="#999999", alpha=0.08)
+        ax.axvspan(split_index, n, color="#4c72b0", alpha=0.06)
+        ax.axvline(split_index, color="#666666", linestyle="--", linewidth=1)
+        ax.text(split_index * 0.5, 0.97, "样本内", ha="center", va="top",
+                fontsize=10, color="#555555",
+                transform=ax.get_xaxis_transform())
+        ax.text(split_index + (n - split_index) * 0.5, 0.97, "样本外",
+                ha="center", va="top", fontsize=10, color="#555555",
+                transform=ax.get_xaxis_transform())
+
+    ax.plot(x, strat[:n], label="策略(MACD 16/32/9)", color="#d62728",
+            linewidth=1.6, zorder=3)
+    ax.plot(x, benchmark_equity[:n], label=benchmark_label,
+            color="#1f77b4", linewidth=1.3, alpha=0.85, zorder=2)
 
     # 标注买卖点
-    if trades:
+    if trades and datetimes:
+        pos = {d: i for i, d in enumerate(datetimes)}
         for t in trades:
-            # 在净值曲线上找对应日期的位置
-            if datetimes and t.datetime in datetimes:
-                idx = list(datetimes).index(t.datetime)
-                if idx < n:
-                    y = strategy_equity[idx]
-                    if t.side.value == "buy":
-                        ax.scatter(idx, y, marker="^", color="green", s=60, zorder=5)
-                    else:
-                        ax.scatter(idx, y, marker="v", color="red", s=60, zorder=5)
+            idx = pos.get(t.datetime)
+            if idx is None or idx >= n:
+                continue
+            y = strat[idx]
+            if t.side.value == "buy":
+                ax.scatter(idx, y, marker="^", color="#2ca02c", s=55,
+                           zorder=5, edgecolors="white", linewidths=0.5)
+            else:
+                ax.scatter(idx, y, marker="v", color="#d62728", s=55,
+                           zorder=5, edgecolors="white", linewidths=0.5)
+
+    # 日期刻度（约 6 个）
+    if datetimes:
+        step = max(1, n // 6)
+        ticks = list(range(0, n, step))
+        ax.set_xticks(ticks)
+        ax.set_xticklabels([datetimes[i] for i in ticks], rotation=15)
+
+    # 终值标注
+    ax.annotate(f"策略 {strat[n-1]:.3f}", xy=(n - 1, strat[n - 1]),
+                xytext=(-10, 8), textcoords="offset points",
+                color="#d62728", fontsize=9, ha="right")
+    ax.annotate(f"{benchmark_label.split('(')[0]} {benchmark_equity[n-1]:.3f}",
+                xy=(n - 1, benchmark_equity[n - 1]), xytext=(-10, -14),
+                textcoords="offset points", color="#1f77b4", fontsize=9,
+                ha="right")
 
     ax.set_title(title)
     ax.set_xlabel("交易日")
     ax.set_ylabel("归一化净值")
-    ax.legend()
+    ax.legend(loc="upper left")
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
     fig.savefig(save_path, dpi=150)

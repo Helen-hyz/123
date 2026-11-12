@@ -158,4 +158,5 @@ class Cerebro:
             "equity_curve": self.broker.equity_curve,
             "datetimes": self.broker.datetimes,
             "trades": self.broker.trades,
+            "position_history": self.broker.position_history,
         }
