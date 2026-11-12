@@ -36,6 +36,8 @@ class Cerebro:
 
         # 因子 DAG 拓扑序（run 时构建）
         self._compute_order: list = []
+        self._ran: bool = False
+        self.report_result: Optional[dict] = None
 
     # ---------- 配置接口 ----------
     def adddata(self, data: DataFeed) -> None:
@@ -146,7 +148,30 @@ class Cerebro:
             self.broker.record_equity(data.current_datetime)
 
         self.strategy.stop()
+        self._ran = True
         return self._summary()
+
+    # ---------- 基准对比报告（引擎内置）----------
+    def report(self, benchmark: str = "csi300",
+               split_date: Optional[str] = None,
+               prefix: str = "backtest", plot: bool = True) -> dict:
+        """
+        在回测结束后生成「策略 vs 基准」对比报告。
+
+        参数：
+            benchmark : "buyhold"（同标的买入持有）或 "csi300"（沪深300）
+            split_date: 样本内/外分界日期，如 "2022-01-01"；缺省按时间中点切分
+            prefix    : 输出文件前缀，生成 {prefix}_report.txt 与
+                        {prefix}_equity_compare.png
+            plot      : 是否绘制归一化净值对比图
+        """
+        if not self._ran:
+            raise RuntimeError("请先调用 run() 完成回测")
+        from .report import build_and_save
+        self.report_result = build_and_save(
+            self, benchmark=benchmark, split_date=split_date,
+            prefix=prefix, plot=plot)
+        return self.report_result
 
     def _summary(self) -> dict:
         return {
